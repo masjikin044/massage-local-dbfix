@@ -1,0 +1,20 @@
+groups:
+  - name: system_alerts
+    rules:
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backend service is down"
+          description: "Service Backend API tidak dapat dijangkau selama lebih dari 1 menit."
+
+      - alert: HighCpuUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Penggunaan CPU Server Tinggi"
+          description: "Penggunaan CPU melebihi 85% selama 2 menit."

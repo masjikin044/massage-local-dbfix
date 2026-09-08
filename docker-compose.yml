@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: devops_backend
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+
+  frontend-user:
+    build: ./frontend-user
+    container_name: devops_frontend_user
+    restart: always
+
+  frontend-admin:
+    build: ./frontend-admin
+    container_name: devops_frontend_admin
+    restart: always
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: devops_postgres
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-devops} -d ${POSTGRES_DB:-devops_message}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: devops_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  nginx:
+    build: ./nginx
+    container_name: devops_nginx
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+    depends_on:
+      - backend
+      - frontend-user
+      - frontend-admin
+    restart: always
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: devops_prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml
+    ports:
+      - "9090:9090"
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: devops_grafana
+    env_file:
+      - .env
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-adminops}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: always
+
+volumes:
+  postgres_data:

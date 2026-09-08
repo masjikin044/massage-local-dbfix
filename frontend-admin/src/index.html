@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DevOps Message - Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
+  <div id="adminApp" class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-800 border-r border-slate-700 p-4 flex flex-col justify-between">
+      <div>
+        <h2 class="text-xl font-bold text-indigo-400 mb-8">Admin Control</h2>
+        <nav class="space-y-2">
+          <button data-tab="dashboard" onclick="switchTab('dashboard', this)" class="nav-btn w-full text-left px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 transition">Dashboard</button>
+          <button data-tab="users" onclick="switchTab('users', this)" class="nav-btn w-full text-left px-4 py-2 rounded hover:bg-slate-700 transition">User Terdaftar</button>
+          <button data-tab="messages" onclick="switchTab('messages', this)" class="nav-btn w-full text-left px-4 py-2 rounded hover:bg-slate-700 transition">Manajemen Pesan</button>
+          <button data-tab="audit" onclick="switchTab('audit', this)" class="nav-btn w-full text-left px-4 py-2 rounded hover:bg-slate-700 transition">Audit Log</button>
+        </nav>
+      </div>
+      <button onclick="logoutAdmin()" class="w-full bg-red-600 hover:bg-red-700 py-2 rounded font-semibold transition">Logout</button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-8 overflow-y-auto">
+      <!-- Admin Login Overlay -->
+      <div id="adminLoginModal" class="fixed inset-0 bg-slate-900 flex items-center justify-center p-4 z-50">
+        <form onsubmit="handleAdminLogin(event)" class="bg-slate-800 p-8 rounded-lg max-w-md w-full border border-slate-700 space-y-4">
+          <h2 class="text-2xl font-bold text-center text-indigo-400">Admin Login</h2>
+          <div>
+            <label class="block text-sm mb-1">Email / Username</label>
+            <input type="text" id="adminEmail" required class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Password</label>
+            <input type="password" id="adminPassword" required class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
+          </div>
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 py-2 rounded font-semibold">Masuk Dashboard</button>
+        </form>
+      </div>
+
+      <!-- Section: Dashboard -->
+      <section id="tab-dashboard" class="space-y-6">
+        <div class="flex justify-between items-center">
+          <h1 class="text-2xl font-bold">System Statistics</h1>
+          <span class="flex items-center gap-2 text-xs text-slate-400">
+            <span id="liveDot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+            <span id="liveLabel">Menghubungkan...</span>
+          </span>
+        </div>
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+            <span class="text-slate-400 text-sm">TOTAL USER</span>
+            <p id="statTotalUsers" class="text-3xl font-bold mt-1 text-indigo-400">0</p>
+          </div>
+          <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+            <span class="text-slate-400 text-sm">TOTAL PESAN</span>
+            <p id="statTotalMessages" class="text-3xl font-bold mt-1 text-green-400">0</p>
+          </div>
+          <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+            <span class="text-slate-400 text-sm">USER AKTIF</span>
+            <p id="statActiveUsers" class="text-3xl font-bold mt-1 text-blue-400">0</p>
+          </div>
+          <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+            <span class="text-slate-400 text-sm">USER SUSPENDED</span>
+            <p id="statSuspendedUsers" class="text-3xl font-bold mt-1 text-red-400">0</p>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+            <h3 class="font-bold mb-4">Pertumbuhan User (7 Hari)</h3>
+            <canvas id="chartUserGrowth"></canvas>
+          </div>
+          <div class="bg-slate-800 p-4 rounded-lg border border-slate-700">
+            <h3 class="font-bold mb-4">Aktivitas Pesan (7 Hari)</h3>
+            <canvas id="chartMessageActivity"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Users Table -->
+      <section id="tab-users" class="space-y-4 hidden">
+        <div class="flex justify-between items-center">
+          <h1 class="text-2xl font-bold">User Terdaftar</h1>
+          <button onclick="openBroadcastModal()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded text-sm font-semibold transition">⚠️ Kirim Pesan Peringatan ke Semua User</button>
+        </div>
+        <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-700 text-slate-300">
+              <tr>
+                <th class="p-3">ID</th>
+                <th class="p-3">Username</th>
+                <th class="p-3">Email</th>
+                <th class="p-3">Role</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Aksi</th>
+              </tr>
+
+            </thead>
+            <tbody id="adminUserTable" class="divide-y divide-slate-700"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Section: Manajemen Pesan -->
+      <section id="tab-messages" class="space-y-4 hidden">
+        <div class="flex justify-between items-center gap-4">
+          <h1 class="text-2xl font-bold">Manajemen Pesan</h1>
+          <input type="text" id="searchMessages" oninput="loadMessagesTable(1)" placeholder="Cari user atau isi pesan..." class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm w-72 text-white">
+        </div>
+        <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-700 text-slate-300">
+              <tr>
+                <th class="p-3">Waktu</th>
+                <th class="p-3">Pengirim</th>
+                <th class="p-3">Penerima</th>
+                <th class="p-3">Pesan</th>
+                <th class="p-3">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="adminMessagesTable" class="divide-y divide-slate-700"></tbody>
+          </table>
+        </div>
+        <div class="flex justify-between items-center text-sm text-slate-400">
+          <span id="messagesPageInfo"></span>
+          <div class="flex gap-2">
+            <button onclick="changeMessagesPage(-1)" class="px-3 py-1 bg-slate-700 rounded hover:bg-slate-600 transition">Sebelumnya</button>
+            <button onclick="changeMessagesPage(1)" class="px-3 py-1 bg-slate-700 rounded hover:bg-slate-600 transition">Berikutnya</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Audit Log -->
+      <section id="tab-audit" class="space-y-4 hidden">
+        <h1 class="text-2xl font-bold">Audit Log System</h1>
+        <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-700 text-slate-300">
+              <tr>
+                <th class="p-3">Waktu</th>
+                <th class="p-3">Admin</th>
+                <th class="p-3">Aksi</th>
+                <th class="p-3">Deskripsi</th>
+                <th class="p-3">IP Address</th>
+              </tr>
+            </thead>
+            <tbody id="adminAuditTable" class="divide-y divide-slate-700"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal Konfirmasi Generik (dipakai untuk hapus pesan & hapus user) -->
+  <div id="confirmModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-800 p-6 rounded-lg max-w-sm w-full border border-slate-700">
+      <h3 id="confirmModalTitle" class="text-lg font-bold mb-2">Konfirmasi</h3>
+      <p id="confirmModalBody" class="text-slate-300 text-sm mb-6"></p>
+      <div class="flex justify-end gap-3">
+        <button onclick="closeConfirmModal()" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">Batal</button>
+        <button id="confirmModalActionBtn" class="px-4 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm font-semibold">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Reset Password -->
+  <div id="resetPasswordModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+    <form onsubmit="submitResetPassword(event)" class="bg-slate-800 p-6 rounded-lg max-w-sm w-full border border-slate-700 space-y-4">
+      <h3 class="text-lg font-bold">Reset Password: <span id="resetPasswordUsername" class="text-indigo-400"></span></h3>
+      <p class="text-slate-400 text-xs">Password lama tidak bisa ditampilkan (tersimpan sebagai hash satu arah). Set password baru untuk user ini.</p>
+      <div>
+        <label class="block text-sm mb-1 text-slate-300">Password Baru</label>
+        <input type="password" id="newPasswordInput" required minlength="6" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white">
+      </div>
+      <div>
+        <label class="block text-sm mb-1 text-slate-300">Konfirmasi Password Baru</label>
+        <input type="password" id="confirmPasswordInput" required minlength="6" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white">
+      </div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="closeResetPasswordModal()" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">Batal</button>
+        <button type="submit" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded text-sm font-semibold">Simpan Password Baru</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Broadcast Pesan Peringatan -->
+  <div id="broadcastModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+    <form onsubmit="submitBroadcast(event)" class="bg-slate-800 p-6 rounded-lg max-w-md w-full border border-slate-700 space-y-4">
+      <h3 class="text-lg font-bold text-amber-400">⚠️ Kirim Pesan Peringatan ke Semua User</h3>
+      <p class="text-slate-400 text-xs">Pesan ini akan dikirim ke setiap user aktif yang terdaftar, muncul langsung di kotak chat mereka masing-masing.</p>
+      <div>
+        <label class="block text-sm mb-1 text-slate-300">Isi Pesan</label>
+        <textarea id="broadcastMessageInput" required rows="4" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white"></textarea>
+      </div>
+      <div class="flex justify-end gap-3">
+        <button type="button" onclick="closeBroadcastModal()" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">Batal</button>
+        <button type="submit" class="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-sm font-semibold">Kirim ke Semua User</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    let adminToken = localStorage.getItem('adminToken');
+    let adminSocket = null;
+    let refreshTimer = null;
+    let userGrowthChart = null;
+    let messageActivityChart = null;
+
+    // Pagination state untuk tab Manajemen Pesan
+    let messagesPage = 1;
+    const messagesLimit = 20;
+    let messagesTotal = 0;
+
+    if (adminToken) {
+      document.getElementById('adminLoginModal').classList.add('hidden');
+      loadDashboardData();
+    }
+
+    function escapeAdminHtml(str) {
+      const div = document.createElement('div');
+      div.innerText = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
+    async function handleAdminLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('adminEmail').value;
+      const password = document.getElementById('adminPassword').value;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (!res.ok || data.user.role !== 'admin') throw new Error(data.error || 'Bukan akun Admin.');
+
+        adminToken = data.token;
+        localStorage.setItem('adminToken', adminToken);
+        document.getElementById('adminLoginModal').classList.add('hidden');
+        loadDashboardData();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadDashboardData() {
+      try {
+        await loadStats();
+        await loadCharts();
+        await loadUsersTable();
+        await loadAuditTable();
+        connectAdminSocket();
+        // Fallback polling kalau koneksi socket terputus, tetap ada update tiap 20 detik
+        clearInterval(window.__adminPollInterval);
+        window.__adminPollInterval = setInterval(refreshLive, 20000);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadStats() {
+      const statsRes = await fetch('/api/admin/stats', {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      const stats = await statsRes.json();
+      document.getElementById('statTotalUsers').innerText = stats.totalUsers;
+      document.getElementById('statTotalMessages').innerText = stats.totalMessages;
+      document.getElementById('statActiveUsers').innerText = stats.activeUsers;
+      document.getElementById('statSuspendedUsers').innerText = stats.suspendedUsers;
+    }
+
+    // --- REALTIME (WebSocket) ---
+    function connectAdminSocket() {
+      if (adminSocket) return;
+      adminSocket = io({ path: '/socket.io' });
+
+      adminSocket.on('connect', () => setLiveStatus(true));
+      adminSocket.on('disconnect', () => setLiveStatus(false));
+
+      adminSocket.on('admin:update', () => {
+        // Debounce: kalau beberapa event masuk beruntun, cukup refresh sekali
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshLive, 400);
+      });
+    }
+
+    function setLiveStatus(connected) {
+      const dot = document.getElementById('liveDot');
+      const label = document.getElementById('liveLabel');
+      if (!dot || !label) return;
+      dot.className = `w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-500'}`;
+      label.innerText = connected ? 'Live' : 'Terputus - mencoba lagi...';
+    }
+
+    function refreshLive() {
+      loadStats();
+      loadCharts();
+      loadAuditTable();
+      const visible = document.querySelector('main > section:not(.hidden)');
+      if (!visible) return;
+      if (visible.id === 'tab-users') loadUsersTable();
+      if (visible.id === 'tab-messages') loadMessagesTable();
+    }
+
+    // --- CHARTS (update in-place, tidak dibuat ulang, biar realtime & tidak leak) ---
+    async function loadCharts() {
+      await Promise.all([updateUserGrowthChart(), updateMessageActivityChart()]);
+    }
+
+    async function updateUserGrowthChart() {
+      const res = await fetch('/api/admin/user-growth?days=7', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+      const data = await res.json();
+      const labels = data.map(d => new Date(d.date).toLocaleDateString());
+      const values = data.map(d => parseInt(d.count));
+
+      if (userGrowthChart) {
+        userGrowthChart.data.labels = labels;
+        userGrowthChart.data.datasets[0].data = values;
+        userGrowthChart.update();
+      } else {
+        userGrowthChart = new Chart(document.getElementById('chartUserGrowth'), {
+          type: 'line',
+          data: { labels, datasets: [{ label: 'User Baru', data: values, borderColor: '#818cf8', backgroundColor: '#818cf833', tension: 0.3, fill: true }] },
+          options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+        });
+      }
+    }
+
+    async function updateMessageActivityChart() {
+      const res = await fetch('/api/admin/message-activity?days=7', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+      const data = await res.json();
+      const labels = data.map(d => new Date(d.date).toLocaleDateString());
+      const values = data.map(d => parseInt(d.count));
+
+      if (messageActivityChart) {
+        messageActivityChart.data.labels = labels;
+        messageActivityChart.data.datasets[0].data = values;
+        messageActivityChart.update();
+      } else {
+        messageActivityChart = new Chart(document.getElementById('chartMessageActivity'), {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Pesan Terkirim', data: values, backgroundColor: '#34d399' }] },
+          options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+        });
+      }
+    }
+
+    // --- USER TERDAFTAR ---
+    async function loadUsersTable() {
+      const res = await fetch('/api/admin/users', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+      const data = await res.json();
+      const tbody = document.getElementById('adminUserTable');
+      tbody.innerHTML = data.users.map(u => {
+        let actions = '';
+        if (u.role !== 'admin') {
+          if (u.status === 'active') {
+            actions = `<button onclick="kickUser(${u.id})" class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs transition">Kick</button>`;
+          } else if (u.status === 'suspended') {
+            actions = `
+              <button onclick="reactivateUser(${u.id})" class="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-xs transition">Aktifkan</button>
+              <button onclick="openDeleteUserModal(${u.id})" class="px-2 py-1 bg-red-800 hover:bg-red-900 rounded text-xs transition">Hapus</button>
+            `;
+          }
+          actions += ` <button onclick="openResetPasswordModal(${u.id}, '${escapeAdminHtml(u.username).replace(/'/g, "\\'")}')" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs transition">Reset Password</button>`;
+        } else {
+          actions = '<span class="text-xs text-slate-500">-</span>';
+        }
+        return `
+        <tr>
+          <td class="p-3">${u.id}</td>
+          <td class="p-3">${escapeAdminHtml(u.username)}</td>
+          <td class="p-3">${escapeAdminHtml(u.email)}</td>
+          <td class="p-3">${u.role}</td>
+          <td class="p-3"><span class="px-2 py-1 text-xs rounded ${u.status === 'active' ? 'bg-green-600' : 'bg-red-600'}">${u.status}</span></td>
+          <td class="p-3 space-x-1">${actions}</td>
+        </tr>
+      `;
+      }).join('');
+    }
+
+    async function kickUser(id) {
+      openConfirmModal('Kick / Suspend User', 'Apakah Anda yakin ingin menendang/menonaktifkan user ini?', async () => {
+        const res = await fetch(`/api/admin/users/${id}/kick`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.error || 'Gagal menonaktifkan user.');
+        loadUsersTable();
+      });
+    }
+
+    async function reactivateUser(id) {
+      const res = await fetch(`/api/admin/users/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ status: 'active' })
+      });
+      const data = await res.json();
+      if (!res.ok) alert(data.error || 'Gagal mengaktifkan user.');
+      loadUsersTable();
+    }
+
+    function openDeleteUserModal(id) {
+      openConfirmModal(
+        'Hapus User',
+        'User yang dihapus tidak akan bisa login lagi dan hilang dari daftar. Riwayat chat tetap tersimpan agar data lawan bicaranya tidak rusak. Lanjutkan?',
+        async () => {
+          const res = await fetch(`/api/admin/users/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          const data = await res.json();
+          if (!res.ok) { alert(data.error || 'Gagal menghapus user.'); return; }
+          loadUsersTable();
+        }
+      );
+    }
+
+    // --- RESET PASSWORD ---
+    let resetPasswordTargetId = null;
+
+    function openResetPasswordModal(id, username) {
+      resetPasswordTargetId = id;
+      document.getElementById('resetPasswordUsername').innerText = username;
+      document.getElementById('newPasswordInput').value = '';
+      document.getElementById('confirmPasswordInput').value = '';
+      document.getElementById('resetPasswordModal').classList.remove('hidden');
+    }
+
+    function closeResetPasswordModal() {
+      resetPasswordTargetId = null;
+      document.getElementById('resetPasswordModal').classList.add('hidden');
+    }
+
+    async function submitResetPassword(e) {
+      e.preventDefault();
+      const newPassword = document.getElementById('newPasswordInput').value;
+      const confirmPassword = document.getElementById('confirmPasswordInput').value;
+
+      try {
+        const res = await fetch(`/api/admin/users/${resetPasswordTargetId}/password`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+          body: JSON.stringify({ newPassword, confirmPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        closeResetPasswordModal();
+        alert('Password berhasil direset.');
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // --- BROADCAST PESAN PERINGATAN ---
+    function openBroadcastModal() {
+      document.getElementById('broadcastMessageInput').value = '';
+      document.getElementById('broadcastModal').classList.remove('hidden');
+    }
+
+    function closeBroadcastModal() {
+      document.getElementById('broadcastModal').classList.add('hidden');
+    }
+
+    async function submitBroadcast(e) {
+      e.preventDefault();
+      const message = document.getElementById('broadcastMessageInput').value;
+      if (!confirm('Kirim pesan ini ke SEMUA user aktif?')) return;
+
+      try {
+        const res = await fetch('/api/admin/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+          body: JSON.stringify({ message })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        closeBroadcastModal();
+        alert(data.message);
+        loadAuditTable();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // --- MANAJEMEN PESAN ---
+    async function loadMessagesTable(page) {
+      if (page) messagesPage = page;
+      const search = document.getElementById('searchMessages').value;
+      const res = await fetch(`/api/admin/messages?page=${messagesPage}&limit=${messagesLimit}&search=${encodeURIComponent(search)}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      const data = await res.json();
+      messagesTotal = data.total;
+
+      const tbody = document.getElementById('adminMessagesTable');
+      tbody.innerHTML = data.messages.map(m => `
+        <tr>
+          <td class="p-3 whitespace-nowrap">${new Date(m.created_at).toLocaleString()}</td>
+          <td class="p-3">${escapeAdminHtml(m.sender)}</td>
+          <td class="p-3">${escapeAdminHtml(m.receiver)}</td>
+          <td class="p-3 max-w-sm truncate">${m.deleted_at ? '<span class="italic text-slate-500">Pesan telah dihapus</span>' : escapeAdminHtml(m.message)}</td>
+          <td class="p-3">
+            ${!m.deleted_at ? `<button onclick="openDeleteMessageModal(${m.id})" class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs transition">Hapus</button>` : ''}
+          </td>
+        </tr>
+      `).join('');
+
+      const totalPages = Math.max(1, Math.ceil(messagesTotal / messagesLimit));
+      document.getElementById('messagesPageInfo').innerText = `Halaman ${messagesPage} dari ${totalPages} (${messagesTotal} pesan)`;
+    }
+
+    function changeMessagesPage(delta) {
+      const totalPages = Math.max(1, Math.ceil(messagesTotal / messagesLimit));
+      const next = messagesPage + delta;
+      if (next < 1 || next > totalPages) return;
+      loadMessagesTable(next);
+    }
+
+    function openDeleteMessageModal(id) {
+      openConfirmModal('Hapus Pesan', 'Apakah Anda yakin ingin menghapus pesan ini secara permanen?', async () => {
+        const res = await fetch(`/api/messages/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || 'Gagal menghapus pesan.');
+        }
+        loadMessagesTable();
+      });
+    }
+
+    // --- AUDIT LOG ---
+    async function loadAuditTable() {
+      const res = await fetch('/api/admin/audit-logs', { headers: { 'Authorization': `Bearer ${adminToken}` } });
+      const logs = await res.json();
+      const tbody = document.getElementById('adminAuditTable');
+      tbody.innerHTML = logs.map(l => `
+        <tr>
+          <td class="p-3 whitespace-nowrap">${new Date(l.created_at).toLocaleString()}</td>
+          <td class="p-3">${escapeAdminHtml(l.admin_name || 'System')}</td>
+          <td class="p-3">${escapeAdminHtml(l.action)}</td>
+          <td class="p-3">${escapeAdminHtml(l.description)}</td>
+          <td class="p-3">${escapeAdminHtml(l.ip_address)}</td>
+        </tr>
+      `).join('');
+    }
+
+    // --- MODAL KONFIRMASI GENERIK ---
+    function openConfirmModal(title, body, onConfirm) {
+      document.getElementById('confirmModalTitle').innerText = title;
+      document.getElementById('confirmModalBody').innerText = body;
+      document.getElementById('confirmModal').classList.remove('hidden');
+      document.getElementById('confirmModalActionBtn').onclick = () => {
+        closeConfirmModal();
+        onConfirm();
+      };
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmModal').classList.add('hidden');
+    }
+
+    // --- NAVIGASI TAB ---
+    function switchTab(tab, btn) {
+      document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+      document.getElementById(`tab-${tab}`).classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('bg-slate-700'));
+      if (btn) btn.classList.add('bg-slate-700');
+
+      if (tab === 'messages') loadMessagesTable(1);
+      if (tab === 'users') loadUsersTable();
+      if (tab === 'audit') loadAuditTable();
+    }
+
+    function logoutAdmin() {
+      localStorage.removeItem('adminToken');
+      if (adminSocket) adminSocket.disconnect();
+      clearInterval(window.__adminPollInterval);
+      window.location.reload();
+    }
+  </script>
+</body>
+</html>
