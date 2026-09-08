@@ -4,28 +4,22 @@ Panduan ini dari nol: server Debian bersih → sampai aplikasi bisa diakses brow
 Semua langkah **manual** (tidak ada instalasi otomatis di dalam Docker build), sesuai permintaan.
 
 ---
-
 ## 0. Yang perlu disiapkan
 - Server Debian (fisik/VPS) dengan akses `sudo` atau `root`
 - File `devops-project-FIXED.zip` (hasil perbaikan) sudah ada di server, atau di-transfer via `scp`/`sftp`
-
 ---
 
 ## 1. Update sistem & install tools dasar
-
 ```bash
 sudo apt update
 sudo apt install -y curl git unzip
 ```
-
 ---
-
 ## 2. Install Docker & Docker Compose
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 ```
-
 Cek berhasil:
 ```bash
 docker version
@@ -41,28 +35,22 @@ Kalau muncul `Hello from Docker!` → Docker sudah siap.
 > ```
 
 ---
-
 ## 3. Install Node.js & npm di HOST (bukan di dalam container)
 
 Ini wajib karena `backend/Dockerfile` pakai `COPY node_modules ./node_modules` — artinya folder `node_modules` harus **sudah ada di source** sebelum `docker build` dijalankan, bukan di-install otomatis oleh Docker.
 
 Install Node.js 22 LTS via NodeSource (disesuaikan dengan `FROM node:22-alpine` di Dockerfile):
-
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
-
 Cek versi:
 ```bash
 node -v      # harus muncul v22.x.x
 npm -v
 ```
-
 ---
-
 ## 4. Extract project
-
 ```bash
 mkdir -p ~/devops-project
 cd ~/devops-project
@@ -72,7 +60,6 @@ ls
 Pastikan terlihat folder `backend/`, `frontend-user/`, `frontend-admin/`, `nginx/`, `grafana/`, `prometheus/`, file `docker-compose.yml`, `.env`.
 
 ---
-
 ## 5. Install dependency backend secara MANUAL
 
 Ini langkah kunci yang menggantikan `RUN npm install` di dalam Dockerfile:
@@ -82,7 +69,6 @@ cd ~/devops-project/backend
 npm install --omit=dev
 cd ~/devops-project
 ```
-
 Setelah ini, pastikan folder `backend/node_modules` sudah terbentuk:
 ```bash
 ls backend/node_modules | head
@@ -90,7 +76,6 @@ ls backend/node_modules | head
 Kalau isinya banyak folder (express, pg, socket.io, dll) → berarti sudah benar, lanjut ke langkah berikutnya. Baru setelah ini `docker build` akan berhasil, karena `COPY node_modules ./node_modules` di Dockerfile butuh folder ini sudah ada.
 
 ---
-
 ## 6. Cek & sesuaikan file `.env`
 
 File `.env` di root project sudah saya siapkan dengan nilai default (sinkron antara backend & database). Cek isinya:
@@ -137,7 +122,6 @@ docker compose build
 Proses ini hanya meng-copy file (`node_modules` yang sudah Anda siapkan di langkah 5, source code, `nginx.conf`, dll) ke dalam image — **tidak ada proses `npm install` atau instalasi otomatis lain di dalam Docker**.
 
 ---
-
 ## 8. Jalankan semua container
 
 ```bash
@@ -280,6 +264,27 @@ docker compose up -d
 docker compose logs -f backend
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### === UNTUK INSTALL DOCKER LEWAT LINUX DEBIAN ===
 LAKUKAN UPDATE
 ```
@@ -309,8 +314,3 @@ KALAU BERHASIL MUNCUL
 
 
 By Akhsanul and zorcaa
-#   m a s s a g e - l o c a l - d e b 
- 
- #   m a s s a g e - l o c a l - d b f i x 
- 
- 
